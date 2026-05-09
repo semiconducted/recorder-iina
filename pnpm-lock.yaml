@@ -260,7 +260,7 @@ packages:
   '@mui/base@5.0.0-beta.40-1':
     resolution: {integrity: sha512-agKXuNNy0bHUmeU7pNmoZwNFr7Hiyhojkb9+2PVyDG5+6RafYuyMgbrav8CndsB7KUc/U51JAw9vKNDLYBzaUA==}
     engines: {node: '>=12.0.0'}
-    deprecated: This package has been replaced by @base-ui-components/react
+    deprecated: This package has been replaced by @base-ui/react
     peerDependencies:
       '@types/react': ^17.0.0 || ^18.0.0 || ^19.0.0
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -1317,8 +1317,8 @@ packages:
   iina-plugin-definition@0.0.7:
     resolution: {integrity: sha512-rBB7ggTcwKIEXyX9i2WgSO1K/FChO7lva07AWqi8E63pt/BGzukxXCv5DwEY7/0ZdxBwjaDk1XhH8fvPZTM10Q==}
 
-  immutable@5.1.4:
-    resolution: {integrity: sha512-p6u1bG3YSnINT5RQmx/yRZBpenIl30kVxkTLDyHLIMk0gict704Q9n+thfDI7lTRm9vXdDYutVzXhzcThxTnXA==}
+  immutable@5.1.5:
+    resolution: {integrity: sha512-t7xcm2siw+hlUM68I+UEOK+z84RzmN59as9DZ7P1l0994DKUWV7UXBMQZVxaoMSRQ+PBZbHCOoBt7a2wxOMt+A==}
 
   import-fresh@3.3.1:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
@@ -3387,7 +3387,7 @@ snapshots:
 
   iina-plugin-definition@0.0.7: {}
 
-  immutable@5.1.4: {}
+  immutable@5.1.5: {}
 
   import-fresh@3.3.1:
     dependencies:
@@ -3532,8 +3532,8 @@ snapshots:
 
   parcel-optimizer-webview@https://codeload.github.com/iina/parcel-optimizer-webview/tar.gz/18412b22cbf27c6b49bc90b521e02fde80e47806(@parcel/core@2.16.4(@swc/helpers@0.5.17)):
     dependencies:
-      '@parcel/plugin': 2.16.1(@parcel/core@2.16.4(@swc/helpers@0.5.17))
-      '@parcel/utils': 2.16.1
+      '@parcel/plugin': 2.16.4(@parcel/core@2.16.4(@swc/helpers@0.5.17))
+      '@parcel/utils': 2.16.4
     transitivePeerDependencies:
       - '@parcel/core'
       - napi-wasm
@@ -3632,7 +3632,7 @@ snapshots:
   sass@1.94.2:
     dependencies:
       chokidar: 4.0.3
-      immutable: 5.1.4
+      immutable: 5.1.5
       source-map-js: 1.2.1
     optionalDependencies:
       '@parcel/watcher': 2.5.1
