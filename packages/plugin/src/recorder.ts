@@ -109,9 +109,13 @@ async function processVideoClip(
     return;
   }
 
-  const outputPath = createAvailableClipOutputPath(sourcePath, filename, (path) =>
-    api.utils.fileInPath(path),
+  const outputPath = createAvailableClipOutputPath(
+    sourcePath,
+    filename,
+    (path) => api.utils.fileInPath(path),
+    !request.verticalCrop,
   );
+
   const args = createFfmpegArguments({
     sourcePath,
     startPosition: request.startPos,

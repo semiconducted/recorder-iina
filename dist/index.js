@@ -2,6 +2,7 @@
 (() => {
   // packages/plugin/src/ffmpeg.ts
   var FFMPEG_FALLBACK_PATHS = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"];
+  var FASTSTART_CONTAINERS = /* @__PURE__ */ new Set(["mp4", "mov", "m4v"]);
   function resolveFfmpegPath(preferredPath, fileInPath) {
     const preferred = typeof preferredPath === "string" ? preferredPath.trim() : "";
     const candidates = [preferred, ...FFMPEG_FALLBACK_PATHS];
@@ -22,31 +23,49 @@
     const end = timestampToSeconds(endPosition);
     return start !== void 0 && end !== void 0 && end > start;
   }
-  function createClipOutputPath(sourcePath, filename) {
+  function fileExtension(pathOrName) {
+    const lastSlash = pathOrName.lastIndexOf("/");
+    const name = lastSlash >= 0 ? pathOrName.slice(lastSlash + 1) : pathOrName;
+    const lastDot = name.lastIndexOf(".");
+    return lastDot > 0 ? name.slice(lastDot + 1).toLowerCase() : "";
+  }
+  function createClipOutputPath(sourcePath, filename, lossless = true) {
     const lastSlash = sourcePath.lastIndexOf("/");
     const directory = lastSlash >= 0 ? sourcePath.slice(0, lastSlash) : "";
     const lastDot = filename.lastIndexOf(".");
     const basename = (lastDot > 0 ? filename.slice(0, lastDot) : filename).trim() || "clip";
-    const outputName = `${basename}_clip.mov`;
+    const sourceExtension = fileExtension(filename);
+    const extension = lossless && sourceExtension.length > 0 ? sourceExtension : "mov";
+    const outputName = `${basename}_clip.${extension}`;
     return directory ? `${directory}/${outputName}` : lastSlash === 0 ? `/${outputName}` : outputName;
   }
-  function createAvailableClipOutputPath(sourcePath, filename, fileExists) {
-    const preferredPath = createClipOutputPath(sourcePath, filename);
+  function createAvailableClipOutputPath(sourcePath, filename, fileExists, lossless = true) {
+    const preferredPath = createClipOutputPath(sourcePath, filename, lossless);
     if (!fileExists(preferredPath)) return preferredPath;
-    const stem = preferredPath.slice(0, -".mov".length);
+    const suffix = `.${fileExtension(preferredPath)}`;
+    const stem = preferredPath.slice(0, -suffix.length);
     let index = 2;
-    while (fileExists(`${stem}_${index}.mov`)) index += 1;
-    return `${stem}_${index}.mov`;
+    while (fileExists(`${stem}_${index}${suffix}`)) index += 1;
+    return `${stem}_${index}${suffix}`;
   }
   function createFfmpegArguments(options) {
     const args = [];
+    const start = timestampToSeconds(options.startPosition);
+    const end = timestampToSeconds(options.endPosition);
+    if (!options.verticalCrop && start !== void 0 && end !== void 0 && end > start) {
+      args.push("-ss", String(start), "-i", options.sourcePath, "-t", String(end - start));
+      args.push("-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero");
+      if (FASTSTART_CONTAINERS.has(fileExtension(options.outputPath))) {
+        args.push("-movflags", "+faststart");
+      }
+      args.push(options.outputPath);
+      return args;
+    }
     if (options.hardwareAcceleration) {
       args.push("-hwaccel", "videotoolbox");
     }
     args.push("-i", options.sourcePath, "-ss", options.startPosition, "-to", options.endPosition);
-    if (options.verticalCrop) {
-      args.push("-vf", "crop=w=ih*(9/16):h=ih:x=(iw-ow)/2:y=0,format=yuv420p");
-    }
+    args.push("-vf", "crop=w=ih*(9/16):h=ih:x=(iw-ow)/2:y=0,format=yuv420p");
     if (options.hardwareAcceleration) {
       args.push("-c:v", "h264_videotoolbox", "-q:v", "70");
     } else {
@@ -121,7 +140,8 @@
     const outputPath = createAvailableClipOutputPath(
       sourcePath,
       filename,
-      (path) => api.utils.fileInPath(path)
+      (path) => api.utils.fileInPath(path),
+      !request.verticalCrop
     );
     const args = createFfmpegArguments({
       sourcePath,
