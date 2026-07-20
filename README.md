@@ -24,7 +24,7 @@ Requires IINA 1.4.0 or later and FFmpeg.
 
 1. Open IINA → Settings → Plugins.
 2. Choose **Install from GitHub** and enter:
-   `https://github.com/5thDimensionalVader/recorder-iina`
+   `https://github.com/semiconducted/recorder-iina`
 3. Enable **Recorder**.
 4. Open a local video, then choose Plugins → **Start Clipping** or press <kbd>⌥⇧R</kbd>.
 
