@@ -5,32 +5,27 @@ Clip your favourite moments from videos without leaving IINA.
 ## Features
 
 - Choose a clip range from the IINA sidebar.
-- Export with FFmpeg beside the source video.
-- Use Apple VideoToolbox hardware acceleration.
-- Create an optional centered 9:16 crop for social video.
+- FAST LOSSLESS export, maintaining original file type, video, and audio (clips at nearest keyframe, use re-encode export for exact frame cuts).
+- Exports reencoded video beside the source video.
+- Apple VideoToolbox hardware acceleration support.
+- Optional centered 9:16 cropping.
 
 ## Requirements
 
 - IINA 1.4.0 or newer
-- FFmpeg installed through Homebrew or configured in Recorder preferences
+- FFmpeg installed
 - Node.js 22 or newer and pnpm 11 for local development
-
-Recorder checks `/opt/homebrew/bin/ffmpeg` on Apple Silicon and `/usr/local/bin/ffmpeg` on Intel
-when no custom path is configured.
 
 ## Installation
 
 Requires IINA 1.4.0 or later and FFmpeg.
-
 1. Open IINA → Settings → Plugins.
 2. Choose **Install from GitHub** and enter:
    `https://github.com/semiconducted/recorder-iina`
 3. Enable **Recorder**.
-4. Open a local video, then choose Plugins → **Start Clipping** or press <kbd>⌥⇧R</kbd>.
-
-Recorder detects Homebrew installations of FFmpeg automatically. If FFmpeg is installed somewhere
-else, open IINA → Settings → Plugins → Recorder → Preferences and enter the full path to the binary.
-Completed clips are saved beside the source video.
+4. Recorder detects Homebrew installations of FFmpeg automatically (`/opt/homebrew/bin/ffmpeg` on Apple Silicon and `/usr/local/bin/ffmpeg` on Intel). 
+If FFmpeg is installed somewhere else, open IINA → Settings → Plugins → Recorder → Preferences and enter the full path to the binary.
+5. Open a local video, then choose Plugins → **Start Clipping** or press <kbd>⌥⇧R</kbd>.
 
 ## Local development and testing
 
