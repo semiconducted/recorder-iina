@@ -1,7 +1,9 @@
-import type {
-  ClipStatusPayload,
-  PluginToWebviewMessages,
-  ProcessVideoClipPayload,
+import {
+  formatTimestamp,
+  type ClipMark,
+  type ClipStatusPayload,
+  type PluginToWebviewMessages,
+  type ProcessVideoClipPayload,
 } from '@recorder/contracts';
 import {
   createAvailableClipOutputPath,
@@ -15,6 +17,8 @@ type Sidebar = IINA.API.SidebarView;
 type OverlayTone = 'neutral' | 'success' | 'error';
 
 let overlayHideTimer: ReturnType<typeof setTimeout> | undefined;
+// Marks are kept here too, so a sidebar that loads after a hotkey still receives them.
+const marks = new Map<ClipMark, number>();
 
 function postToSidebar<Name extends keyof PluginToWebviewMessages>(
   sidebar: Sidebar,
@@ -84,8 +88,15 @@ function postFfmpegAvailability(api: IINA.IINAGlobal): void {
   });
 }
 
-function postCurrentTime(api: IINA.IINAGlobal): void {
-  postToSidebar(api.sidebar, 'currentTime', { time: api.mpv.getNumber('time-pos') });
+function isClipMark(value: unknown): value is ClipMark {
+  return value === 'in' || value === 'out';
+}
+
+function markCurrentTime(api: IINA.IINAGlobal, mark: ClipMark): void {
+  const time = api.mpv.getNumber('time-pos');
+  marks.set(mark, time);
+  postToSidebar(api.sidebar, 'mark', { mark, time });
+  displayOverlay(api, `${mark === 'in' ? 'In' : 'Out'} ${formatTimestamp(time)}`, 'neutral', 1_500);
 }
 
 async function processVideoClip(
@@ -159,9 +170,16 @@ async function processVideoClip(
 }
 
 function registerSidebarMessages(api: IINA.IINAGlobal): void {
-  api.sidebar.onMessage('getEndTime', () => {
-    postToSidebar(api.sidebar, 'endTime', { time: api.mpv.getNumber('time-pos') });
-    api.core.pause();
+  api.sidebar.onMessage('markTime', (payload: unknown) => {
+    if (typeof payload !== 'object' || payload === null) return;
+    const { mark } = payload as { mark?: unknown };
+    if (isClipMark(mark)) markCurrentTime(api, mark);
+  });
+
+  api.sidebar.onMessage('seekTo', (payload: unknown) => {
+    if (typeof payload !== 'object' || payload === null) return;
+    const { time } = payload as { time?: unknown };
+    if (typeof time === 'number' && Number.isFinite(time) && time >= 0) api.core.seekTo(time);
   });
 
   api.sidebar.onMessage('processVideoClip', (payload: unknown) => {
@@ -177,8 +195,10 @@ function registerSidebarMessages(api: IINA.IINAGlobal): void {
   });
 
   api.sidebar.onMessage('closeWindow', () => api.sidebar.hide());
-  api.sidebar.onMessage('requestCurrentTime', () => postCurrentTime(api));
-  api.sidebar.onMessage('requestFfmpegCheck', () => postFfmpegAvailability(api));
+  api.sidebar.onMessage('ready', () => {
+    postFfmpegAvailability(api);
+    for (const [mark, time] of marks) postToSidebar(api.sidebar, 'mark', { mark, time });
+  });
 }
 
 export function setupRecorder(api: IINA.IINAGlobal): void {
@@ -190,19 +210,47 @@ export function setupRecorder(api: IINA.IINAGlobal): void {
     sidebarLoaded = true;
   };
 
-  const startRecorderMenuItem = api.menu.item(
-    'Start Clipping',
-    () => {
-      if (!api.core.window.loaded) return;
-      loadSidebar();
-      api.sidebar.show();
-      postCurrentTime(api);
-      postFfmpegAvailability(api);
-    },
-    { keyBinding: 'Alt+Shift+r' },
+  const openRecorder = (): boolean => {
+    if (!api.core.window.loaded) return false;
+    loadSidebar();
+    api.sidebar.show();
+    postFfmpegAvailability(api);
+    return true;
+  };
+
+  api.menu.addItem(
+    api.menu.item(
+      'Start Clipping',
+      () => {
+        openRecorder();
+      },
+      { keyBinding: 'Alt+Shift+r' },
+    ),
+  );
+  api.menu.addItem(
+    api.menu.item(
+      'Set Clip In',
+      () => {
+        if (openRecorder()) markCurrentTime(api, 'in');
+      },
+      { keyBinding: 'Alt+Shift+i' },
+    ),
+  );
+  api.menu.addItem(
+    api.menu.item(
+      'Set Clip Out',
+      () => {
+        if (openRecorder()) markCurrentTime(api, 'out');
+      },
+      { keyBinding: 'Alt+Shift+o' },
+    ),
   );
 
-  api.menu.addItem(startRecorderMenuItem);
+  // Marks belong to one file, so clear them when another file opens.
+  api.event.on('iina.file-loaded', () => {
+    marks.clear();
+    if (sidebarLoaded) postToSidebar(api.sidebar, 'reset', undefined);
+  });
 
   if (api.core.window.loaded) {
     loadSidebar();

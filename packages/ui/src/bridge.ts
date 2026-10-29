@@ -1,8 +1,8 @@
 import type {
   ClipStatusPayload,
   FfmpegAvailabilityPayload,
+  MarkPayload,
   PluginToWebviewMessages,
-  TimePayload,
   WebviewToPluginMessages,
 } from '@recorder/contracts';
 
@@ -22,9 +22,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function parseTimePayload(value: unknown): TimePayload | undefined {
-  return isRecord(value) && typeof value.time === 'number' && Number.isFinite(value.time)
-    ? { time: value.time }
+function parseMarkPayload(value: unknown): MarkPayload | undefined {
+  return isRecord(value) &&
+    (value.mark === 'in' || value.mark === 'out') &&
+    typeof value.time === 'number' &&
+    Number.isFinite(value.time)
+    ? { mark: value.mark, time: value.time }
     : undefined;
 }
 
@@ -60,14 +63,11 @@ class RecorderBridge {
   private readonly listeners = new Map<PluginMessageName, Set<Listener>>();
 
   constructor() {
-    this.nativeBridge?.onMessage('currentTime', (value) => {
-      const payload = parseTimePayload(value);
-      if (payload) this.emit('currentTime', payload);
+    this.nativeBridge?.onMessage('mark', (value) => {
+      const payload = parseMarkPayload(value);
+      if (payload) this.emit('mark', payload);
     });
-    this.nativeBridge?.onMessage('endTime', (value) => {
-      const payload = parseTimePayload(value);
-      if (payload) this.emit('endTime', payload);
-    });
+    this.nativeBridge?.onMessage('reset', () => this.emit('reset', undefined));
     this.nativeBridge?.onMessage('is-ffmpeg-installed', (value) => {
       const payload = parseAvailability(value);
       if (payload) this.emit('is-ffmpeg-installed', payload);
@@ -97,7 +97,7 @@ class RecorderBridge {
       return;
     }
 
-    this.handlePreviewMessage(name);
+    this.handlePreviewMessage(name, payload);
   }
 
   private emit<Name extends PluginMessageName>(
@@ -109,11 +109,11 @@ class RecorderBridge {
     }
   }
 
-  private handlePreviewMessage(name: keyof WebviewToPluginMessages): void {
-    if (name === 'requestCurrentTime') {
-      queueMicrotask(() => this.emit('currentTime', { time: 3_723 }));
-    }
-    if (name === 'requestFfmpegCheck') {
+  private handlePreviewMessage<Name extends keyof WebviewToPluginMessages>(
+    name: Name,
+    payload: WebviewToPluginMessages[Name],
+  ): void {
+    if (name === 'ready') {
       queueMicrotask(() =>
         this.emit('is-ffmpeg-installed', {
           isInstalled: true,
@@ -121,8 +121,9 @@ class RecorderBridge {
         }),
       );
     }
-    if (name === 'getEndTime') {
-      queueMicrotask(() => this.emit('endTime', { time: 3_748 }));
+    if (name === 'markTime') {
+      const { mark } = payload as WebviewToPluginMessages['markTime'];
+      queueMicrotask(() => this.emit('mark', { mark, time: mark === 'in' ? 3_723.4 : 3_748.25 }));
     }
     if (name === 'processVideoClip') {
       this.emit('ffmpeg-status-out', {

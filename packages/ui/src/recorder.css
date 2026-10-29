@@ -109,79 +109,105 @@ input:focus-visible + span {
   font-size: 9px;
 }
 
-.time-grid {
+.mark-list {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 12px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
 
-.time-field {
-  position: relative;
-  min-width: 0;
-  padding: 13px 11px 14px 0;
-}
-
-.time-field + .time-field {
-  padding-left: 14px;
-  border-left: 1px solid var(--line-soft);
-}
-
-.time-field > span {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--faint);
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-}
-
-.time-field strong {
-  display: block;
-  overflow: hidden;
-  color: var(--ink);
-  font-family: 'SF Mono', 'Roboto Mono', monospace;
-  font-size: 15px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 450;
-  letter-spacing: 0.035em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.time-field--action {
-  padding-right: 35px;
-}
-
-.stop-button {
-  position: absolute;
-  top: 50%;
-  right: 0;
+.mark-row {
   display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid rgba(255, 145, 137, 0.42);
-  border-radius: 50%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.mark-button {
+  display: grid;
+  justify-items: center;
+  min-width: 64px;
+  min-height: 38px;
+  padding: 4px 10px;
+  border: 1px solid rgba(245, 244, 239, 0.42);
+  border-radius: 2px;
   cursor: pointer;
-  color: var(--danger);
+  color: var(--ink);
   background: transparent;
-  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 590;
   transition:
     color 140ms ease,
     background 140ms ease;
 }
 
-.stop-button:hover:not(:disabled) {
-  color: var(--onyx-deep);
-  background: var(--danger);
+.mark-button small {
+  color: var(--faint);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
 }
 
-.stop-button:disabled {
+.mark-button:hover:not(:disabled) {
+  color: var(--onyx-deep);
+  background: var(--ink);
+}
+
+.mark-button:hover:not(:disabled) small {
+  color: var(--onyx-deep);
+}
+
+.mark-input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+  font-family: 'SF Mono', 'Roboto Mono', monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mark-input::placeholder {
+  color: var(--faint);
+}
+
+.mark-input:focus {
+  outline: none;
+  border-color: rgba(245, 244, 239, 0.85);
+}
+
+.mark-input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.seek-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--muted);
+  background: transparent;
+}
+
+.seek-button:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: rgba(255, 255, 255, 0.48);
+}
+
+.mark-button:disabled,
+.mark-input:disabled,
+.seek-button:disabled {
   cursor: default;
-  opacity: 0.28;
+  opacity: 0.3;
 }
 
 .range-help {
@@ -393,15 +419,8 @@ input:focus-visible + span {
 }
 
 @media (max-width: 250px) {
-  .time-grid,
   .action-grid {
     grid-template-columns: 1fr;
-  }
-
-  .time-field + .time-field {
-    padding-left: 0;
-    border-top: 1px solid var(--line-soft);
-    border-left: 0;
   }
 
   .section-heading span {

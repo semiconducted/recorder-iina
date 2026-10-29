@@ -1,5 +1,31 @@
 "use strict";
 (() => {
+  // packages/contracts/src/index.ts
+  var SECONDS_PATTERN = /^\d+(?:\.\d+)?$/;
+  var WHOLE_PATTERN = /^\d+$/;
+  function parseTimestamp(text) {
+    const parts = text.trim().split(":");
+    if (parts.length > 3) return void 0;
+    const [seconds = "", minutes, hours] = parts.reverse();
+    if (!SECONDS_PATTERN.test(seconds)) return void 0;
+    if (minutes !== void 0 && (!WHOLE_PATTERN.test(minutes) || Number(seconds) >= 60)) {
+      return void 0;
+    }
+    if (hours !== void 0 && (!WHOLE_PATTERN.test(hours) || Number(minutes) >= 60)) {
+      return void 0;
+    }
+    return Number(hours ?? 0) * 3600 + Number(minutes ?? 0) * 60 + Number(seconds);
+  }
+  function formatTimestamp(positionInSeconds) {
+    const safePosition = Number.isFinite(positionInSeconds) ? Math.max(0, positionInSeconds) : 0;
+    const totalMilliseconds = Math.round(safePosition * 1e3);
+    const hours = Math.floor(totalMilliseconds / 36e5);
+    const minutes = Math.floor(totalMilliseconds % 36e5 / 6e4);
+    const seconds = Math.floor(totalMilliseconds % 6e4 / 1e3);
+    const milliseconds = totalMilliseconds % 1e3;
+    return `${[hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":")}.${String(milliseconds).padStart(3, "0")}`;
+  }
+
   // packages/plugin/src/ffmpeg.ts
   var FFMPEG_FALLBACK_PATHS = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"];
   var FASTSTART_CONTAINERS = /* @__PURE__ */ new Set(["mp4", "mov", "m4v"]);
@@ -11,16 +37,9 @@
   function isLocalSourcePath(sourcePath) {
     return sourcePath.length > 0 && !sourcePath.includes("://");
   }
-  function timestampToSeconds(timestamp) {
-    const match = /^(\d+):([0-5]\d):([0-5]\d)$/.exec(timestamp);
-    if (!match) return void 0;
-    const [, hours, minutes, seconds] = match;
-    if (hours === void 0 || minutes === void 0 || seconds === void 0) return void 0;
-    return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
-  }
   function isValidClipRange(startPosition, endPosition) {
-    const start = timestampToSeconds(startPosition);
-    const end = timestampToSeconds(endPosition);
+    const start = parseTimestamp(startPosition);
+    const end = parseTimestamp(endPosition);
     return start !== void 0 && end !== void 0 && end > start;
   }
   function fileExtension(pathOrName) {
@@ -48,12 +67,22 @@
     while (fileExists(`${stem}_${index}${suffix}`)) index += 1;
     return `${stem}_${index}${suffix}`;
   }
+  function roundToMilliseconds(seconds) {
+    return Math.round(seconds * 1e3) / 1e3;
+  }
   function createFfmpegArguments(options) {
     const args = [];
-    const start = timestampToSeconds(options.startPosition);
-    const end = timestampToSeconds(options.endPosition);
+    const start = parseTimestamp(options.startPosition);
+    const end = parseTimestamp(options.endPosition);
     if (!options.verticalCrop && start !== void 0 && end !== void 0 && end > start) {
-      args.push("-ss", String(start), "-i", options.sourcePath, "-t", String(end - start));
+      args.push(
+        "-ss",
+        String(start),
+        "-i",
+        options.sourcePath,
+        "-t",
+        String(roundToMilliseconds(end - start))
+      );
       args.push("-map", "0", "-c", "copy", "-avoid_negative_ts", "make_zero");
       if (FASTSTART_CONTAINERS.has(fileExtension(options.outputPath))) {
         args.push("-movflags", "+faststart");
@@ -64,7 +93,10 @@
     if (options.hardwareAcceleration) {
       args.push("-hwaccel", "videotoolbox");
     }
-    args.push("-i", options.sourcePath, "-ss", options.startPosition, "-to", options.endPosition);
+    args.push("-i", options.sourcePath);
+    if (start !== void 0 && end !== void 0) {
+      args.push("-ss", String(start), "-to", String(end));
+    }
     args.push("-vf", "crop=w=ih*(9/16):h=ih:x=(iw-ow)/2:y=0,format=yuv420p");
     if (options.hardwareAcceleration) {
       args.push("-c:v", "h264_videotoolbox", "-q:v", "70");
@@ -77,6 +109,7 @@
 
   // packages/plugin/src/recorder.ts
   var overlayHideTimer;
+  var marks = /* @__PURE__ */ new Map();
   function postToSidebar(sidebar, name, payload) {
     sidebar.postMessage(name, payload);
   }
@@ -118,8 +151,14 @@
       path: path ?? ""
     });
   }
-  function postCurrentTime(api) {
-    postToSidebar(api.sidebar, "currentTime", { time: api.mpv.getNumber("time-pos") });
+  function isClipMark(value) {
+    return value === "in" || value === "out";
+  }
+  function markCurrentTime(api, mark) {
+    const time = api.mpv.getNumber("time-pos");
+    marks.set(mark, time);
+    postToSidebar(api.sidebar, "mark", { mark, time });
+    displayOverlay(api, `${mark === "in" ? "In" : "Out"} ${formatTimestamp(time)}`, "neutral", 1500);
   }
   async function processVideoClip(api, request) {
     const ffmpegPath = detectFfmpeg(api);
@@ -182,9 +221,15 @@
     }
   }
   function registerSidebarMessages(api) {
-    api.sidebar.onMessage("getEndTime", () => {
-      postToSidebar(api.sidebar, "endTime", { time: api.mpv.getNumber("time-pos") });
-      api.core.pause();
+    api.sidebar.onMessage("markTime", (payload) => {
+      if (typeof payload !== "object" || payload === null) return;
+      const { mark } = payload;
+      if (isClipMark(mark)) markCurrentTime(api, mark);
+    });
+    api.sidebar.onMessage("seekTo", (payload) => {
+      if (typeof payload !== "object" || payload === null) return;
+      const { time } = payload;
+      if (typeof time === "number" && Number.isFinite(time) && time >= 0) api.core.seekTo(time);
     });
     api.sidebar.onMessage("processVideoClip", (payload) => {
       if (!isProcessVideoClipPayload(payload)) {
@@ -198,8 +243,10 @@
       void processVideoClip(api, payload);
     });
     api.sidebar.onMessage("closeWindow", () => api.sidebar.hide());
-    api.sidebar.onMessage("requestCurrentTime", () => postCurrentTime(api));
-    api.sidebar.onMessage("requestFfmpegCheck", () => postFfmpegAvailability(api));
+    api.sidebar.onMessage("ready", () => {
+      postFfmpegAvailability(api);
+      for (const [mark, time] of marks) postToSidebar(api.sidebar, "mark", { mark, time });
+    });
   }
   function setupRecorder(api) {
     let sidebarLoaded = false;
@@ -209,18 +256,44 @@
       registerSidebarMessages(api);
       sidebarLoaded = true;
     };
-    const startRecorderMenuItem = api.menu.item(
-      "Start Clipping",
-      () => {
-        if (!api.core.window.loaded) return;
-        loadSidebar();
-        api.sidebar.show();
-        postCurrentTime(api);
-        postFfmpegAvailability(api);
-      },
-      { keyBinding: "Alt+Shift+r" }
+    const openRecorder = () => {
+      if (!api.core.window.loaded) return false;
+      loadSidebar();
+      api.sidebar.show();
+      postFfmpegAvailability(api);
+      return true;
+    };
+    api.menu.addItem(
+      api.menu.item(
+        "Start Clipping",
+        () => {
+          openRecorder();
+        },
+        { keyBinding: "Alt+Shift+r" }
+      )
     );
-    api.menu.addItem(startRecorderMenuItem);
+    api.menu.addItem(
+      api.menu.item(
+        "Set Clip In",
+        () => {
+          if (openRecorder()) markCurrentTime(api, "in");
+        },
+        { keyBinding: "Alt+Shift+i" }
+      )
+    );
+    api.menu.addItem(
+      api.menu.item(
+        "Set Clip Out",
+        () => {
+          if (openRecorder()) markCurrentTime(api, "out");
+        },
+        { keyBinding: "Alt+Shift+o" }
+      )
+    );
+    api.event.on("iina.file-loaded", () => {
+      marks.clear();
+      if (sidebarLoaded) postToSidebar(api.sidebar, "reset", void 0);
+    });
     if (api.core.window.loaded) {
       loadSidebar();
     } else {

@@ -1,3 +1,5 @@
+import { parseTimestamp } from '@recorder/contracts';
+
 export const FFMPEG_FALLBACK_PATHS = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'] as const;
 
 // Containers that support the faststart moov-atom relocation.
@@ -26,18 +28,9 @@ export function isLocalSourcePath(sourcePath: string): boolean {
   return sourcePath.length > 0 && !sourcePath.includes('://');
 }
 
-export function timestampToSeconds(timestamp: string): number | undefined {
-  const match = /^(\d+):([0-5]\d):([0-5]\d)$/.exec(timestamp);
-  if (!match) return undefined;
-
-  const [, hours, minutes, seconds] = match;
-  if (hours === undefined || minutes === undefined || seconds === undefined) return undefined;
-  return Number(hours) * 3_600 + Number(minutes) * 60 + Number(seconds);
-}
-
 export function isValidClipRange(startPosition: string, endPosition: string): boolean {
-  const start = timestampToSeconds(startPosition);
-  const end = timestampToSeconds(endPosition);
+  const start = parseTimestamp(startPosition);
+  const end = parseTimestamp(endPosition);
   return start !== undefined && end !== undefined && end > start;
 }
 
@@ -83,16 +76,27 @@ export function createAvailableClipOutputPath(
   return `${stem}_${index}${suffix}`;
 }
 
+function roundToMilliseconds(seconds: number): number {
+  return Math.round(seconds * 1_000) / 1_000;
+}
+
 export function createFfmpegArguments(options: FfmpegArgumentsOptions): string[] {
   const args: string[] = [];
-  const start = timestampToSeconds(options.startPosition);
-  const end = timestampToSeconds(options.endPosition);
+  const start = parseTimestamp(options.startPosition);
+  const end = parseTimestamp(options.endPosition);
 
   // Cropping needs decoded frames, so it cannot be combined with a stream copy.
   if (!options.verticalCrop && start !== undefined && end !== undefined && end > start) {
     // Placing -ss before -i is input seeking. It is near instant and snaps back
     // to the nearest preceding keyframe, so the clip may begin slightly early.
-    args.push('-ss', String(start), '-i', options.sourcePath, '-t', String(end - start));
+    args.push(
+      '-ss',
+      String(start),
+      '-i',
+      options.sourcePath,
+      '-t',
+      String(roundToMilliseconds(end - start)),
+    );
     args.push('-map', '0', '-c', 'copy', '-avoid_negative_ts', 'make_zero');
 
     if (FASTSTART_CONTAINERS.has(fileExtension(options.outputPath))) {
@@ -107,7 +111,10 @@ export function createFfmpegArguments(options: FfmpegArgumentsOptions): string[]
     args.push('-hwaccel', 'videotoolbox');
   }
 
-  args.push('-i', options.sourcePath, '-ss', options.startPosition, '-to', options.endPosition);
+  args.push('-i', options.sourcePath);
+  if (start !== undefined && end !== undefined) {
+    args.push('-ss', String(start), '-to', String(end));
+  }
   args.push('-vf', 'crop=w=ih*(9/16):h=ih:x=(iw-ow)/2:y=0,format=yuv420p');
 
   if (options.hardwareAcceleration) {

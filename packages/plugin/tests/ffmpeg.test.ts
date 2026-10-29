@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { formatTimestamp, parseTimestamp } from '@recorder/contracts';
 import {
   createAvailableClipOutputPath,
   createClipOutputPath,
@@ -50,6 +51,7 @@ describe('clip input and output paths', () => {
 
   it('requires the end timestamp to follow the start timestamp', () => {
     expect(isValidClipRange('00:01:10', '00:01:25')).toBe(true);
+    expect(isValidClipRange('70.25', '1:10.5')).toBe(true);
     expect(isValidClipRange('00:01:25', '00:01:10')).toBe(false);
     expect(isValidClipRange('invalid', '00:01:25')).toBe(false);
   });
@@ -84,6 +86,27 @@ describe('clip input and output paths', () => {
         true,
       ),
     ).toBe('/Users/example/Movies/demo_clip_3.mkv');
+  });
+});
+
+describe('parseTimestamp and formatTimestamp', () => {
+  it('accepts seconds, minutes and hours with fractions', () => {
+    expect(parseTimestamp('83')).toBe(83);
+    expect(parseTimestamp('1:23')).toBe(83);
+    expect(parseTimestamp(' 0:01:23.5 ')).toBe(83.5);
+    expect(parseTimestamp('01:02:03.250')).toBe(3_723.25);
+  });
+
+  it('rejects malformed times', () => {
+    for (const text of ['', 'abc', '1:60', '1:60:00', '1:2:3:4', '-5', '1.5:00']) {
+      expect(parseTimestamp(text)).toBeUndefined();
+    }
+  });
+
+  it('round trips through the display format', () => {
+    expect(formatTimestamp(3_723.25)).toBe('01:02:03.250');
+    expect(parseTimestamp(formatTimestamp(83.4567))).toBe(83.457);
+    expect(formatTimestamp(-4)).toBe('00:00:00.000');
   });
 });
 
@@ -153,6 +176,18 @@ describe('createFfmpegArguments', () => {
 
     expect(args).not.toContain('-hwaccel');
     expect(args).not.toContain('libx264');
+  });
+
+  it('keeps fractional seconds in a stream copy', () => {
+    const args = createFfmpegArguments({
+      ...baseOptions,
+      startPosition: '00:01:10.200',
+      endPosition: '00:01:25.500',
+      hardwareAcceleration: false,
+      verticalCrop: false,
+    });
+
+    expect(args.slice(0, 6)).toEqual(['-ss', '70.2', '-i', '/Movies/demo.mp4', '-t', '15.3']);
   });
 
   it('re-encodes when a vertical crop is requested', () => {

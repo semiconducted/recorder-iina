@@ -7,7 +7,9 @@ with network access removed and lossless stream copying as the default.
 
 ## Features
 
-- Mark a clip range from the IINA sidebar while the video plays.
+- Set In and Out at the playhead with sidebar buttons or <kbd>⌥⇧I</kbd> /
+  <kbd>⌥⇧O</kbd>, or type a time (`83`, `1:23`, `0:01:23.5`). Each mark has a
+  jump button to check it.
 - **Lossless by default.** Clips are stream-copied: no re-encoding, no quality
   loss, near-instant export, and the original container is preserved (an `.mkv`
   stays `.mkv`).
@@ -92,8 +94,10 @@ Preferences and enter the full path to the binary.
 
 1. Open a local video. Remote URLs and streams are rejected.
 2. Choose Plugins → **Start Clipping**, or press <kbd>⌥⇧R</kbd>.
-3. Mark the start and end of the range in the sidebar.
-4. Export. The clip is written next to the source file.
+3. Play to the start and press **Set In** (<kbd>⌥⇧I</kbd>), then play to the
+   end and press **Set Out** (<kbd>⌥⇧O</kbd>). The hotkeys also work with the
+   sidebar closed. Either time can be typed or corrected in its field.
+4. Press **Create clip**. The clip is written next to the source file.
 
 ## Changes in this fork
 
@@ -110,6 +114,9 @@ Relative to upstream `5thDimensionalVader/recorder-iina`:
 - **Lossless clipping by default.** Exports now stream-copy rather than always
   re-encoding, preserving the original container and quality. Re-encoding still
   happens when vertical crop is enabled.
+- **In/Out marking.** Editable In and Out fields with Set buttons, hotkeys,
+  jump-to buttons and millisecond precision replace the single read-only stop
+  button. Marks clear when another file opens.
 - **Distinct identifier**, `com.semiconducted.recorder-iina`, so this fork does
   not conflict with an upstream installation.
 

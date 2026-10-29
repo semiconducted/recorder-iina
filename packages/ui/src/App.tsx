@@ -1,14 +1,82 @@
-import { CheckCircle, CircleNotch, Stop, WarningCircle } from '@phosphor-icons/react';
+import { CheckCircle, CircleNotch, Play, WarningCircle } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import type { ClipStatusPayload, FfmpegAvailabilityPayload } from '@recorder/contracts';
+import {
+  formatTimestamp,
+  parseTimestamp,
+  type ClipMark,
+  type ClipStatusPayload,
+  type FfmpegAvailabilityPayload,
+} from '@recorder/contracts';
 import { recorderBridge } from './bridge';
-import { formatTime, timestampToSeconds } from './time';
 import './recorder.css';
 
-const EMPTY_TIME = '00:00:00';
+const MARK_LABELS: Record<ClipMark, { name: string; hotkey: string }> = {
+  in: { name: 'In', hotkey: '⌥⇧I' },
+  out: { name: 'Out', hotkey: '⌥⇧O' },
+};
+
+interface MarkFieldProps {
+  mark: ClipMark;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}
+
+function MarkField({ mark, value, disabled, onChange }: MarkFieldProps) {
+  const { name, hotkey } = MARK_LABELS[mark];
+  const seconds = parseTimestamp(value);
+  const isInvalid = value.trim().length > 0 && seconds === undefined;
+
+  function normalize(): void {
+    if (seconds !== undefined) onChange(formatTimestamp(seconds));
+  }
+
+  return (
+    <div className="mark-row">
+      <button
+        type="button"
+        className="mark-button"
+        onClick={() => recorderBridge.post('markTime', { mark })}
+        disabled={disabled}
+        title={`Set ${name} to the playhead (${hotkey})`}
+      >
+        Set {name}
+        <small>{hotkey}</small>
+      </button>
+      <input
+        className="mark-input"
+        type="text"
+        inputMode="decimal"
+        spellCheck={false}
+        placeholder="00:00:00.000"
+        aria-label={`${name} time`}
+        aria-invalid={isInvalid}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={normalize}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') normalize();
+        }}
+      />
+      <button
+        type="button"
+        className="seek-button"
+        onClick={() => {
+          if (seconds !== undefined) recorderBridge.post('seekTo', { time: seconds });
+        }}
+        disabled={disabled || seconds === undefined}
+        aria-label={`Jump to ${name}`}
+        title={`Jump to ${name}`}
+      >
+        <Play size={12} weight="fill" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
 
 export function App() {
-  const [startPosition, setStartPosition] = useState(EMPTY_TIME);
+  const [startPosition, setStartPosition] = useState('');
   const [endPosition, setEndPosition] = useState('');
   const [availability, setAvailability] = useState<FfmpegAvailabilityPayload>();
   const [clipStatus, setClipStatus] = useState<ClipStatusPayload>();
@@ -17,18 +85,21 @@ export function App() {
 
   useEffect(() => {
     const unsubscribe = [
-      recorderBridge.subscribe('currentTime', ({ time }) => {
-        setStartPosition(formatTime(time));
+      recorderBridge.subscribe('mark', ({ mark, time }) => {
+        const setPosition = mark === 'in' ? setStartPosition : setEndPosition;
+        setPosition(formatTimestamp(time));
+        setClipStatus(undefined);
+      }),
+      recorderBridge.subscribe('reset', () => {
+        setStartPosition('');
         setEndPosition('');
         setClipStatus(undefined);
       }),
-      recorderBridge.subscribe('endTime', ({ time }) => setEndPosition(formatTime(time))),
       recorderBridge.subscribe('is-ffmpeg-installed', setAvailability),
       recorderBridge.subscribe('ffmpeg-status-out', setClipStatus),
     ];
 
-    recorderBridge.post('requestCurrentTime', undefined);
-    recorderBridge.post('requestFfmpegCheck', undefined);
+    recorderBridge.post('ready', undefined);
 
     return () => {
       for (const stopListening of unsubscribe) stopListening();
@@ -36,22 +107,17 @@ export function App() {
   }, []);
 
   const isProcessing = clipStatus?.status === true;
-  const startSeconds = timestampToSeconds(startPosition);
-  const endSeconds = timestampToSeconds(endPosition);
+  const startSeconds = parseTimestamp(startPosition);
+  const endSeconds = parseTimestamp(endPosition);
   const hasValidRange =
     startSeconds !== undefined && endSeconds !== undefined && endSeconds > startSeconds;
   const canCreateClip = availability?.isInstalled === true && hasValidRange && !isProcessing;
 
-  function captureEndPosition(): void {
-    setClipStatus(undefined);
-    recorderBridge.post('getEndTime', undefined);
-  }
-
   function createClip(): void {
     if (!canCreateClip) return;
     recorderBridge.post('processVideoClip', {
-      startPos: startPosition,
-      endPos: endPosition,
+      startPos: formatTimestamp(startSeconds),
+      endPos: formatTimestamp(endSeconds),
       hwaccel: hardwareAcceleration,
       verticalCrop,
     });
@@ -68,40 +134,36 @@ export function App() {
       <header className="recorder-heading">
         <p>Recorder</p>
         <h1>Create a clip</h1>
-        <span>Mark the moment. Export it cleanly.</span>
+        <span>Set In and Out at the playhead, or type a time.</span>
       </header>
 
       <section className="clip-controls" aria-labelledby="clip-range-heading">
         <div className="section-heading">
           <h2 id="clip-range-heading">Clip range</h2>
-          <span>Select an end point</span>
+          <span>
+            {hasValidRange
+              ? `Length ${formatTimestamp(endSeconds - startSeconds)}`
+              : 'Out must follow In'}
+          </span>
         </div>
 
-        <div className="time-grid">
-          <div className="time-field">
-            <span>Start position</span>
-            <strong>{availability?.isInstalled === false ? EMPTY_TIME : startPosition}</strong>
-          </div>
-          <div className="time-field time-field--action">
-            <span>End position</span>
-            <strong>
-              {availability?.isInstalled === false ? EMPTY_TIME : endPosition || '—:—:—'}
-            </strong>
-            <button
-              type="button"
-              className="stop-button"
-              onClick={captureEndPosition}
-              disabled={!availability?.isInstalled || isProcessing}
-              aria-label="Use the current playback time as the clip end"
-              title="Set clip end"
-            >
-              <Stop size={14} weight="fill" aria-hidden="true" />
-            </button>
-          </div>
+        <div className="mark-list">
+          {(['in', 'out'] as const).map((mark) => (
+            <MarkField
+              key={mark}
+              mark={mark}
+              value={mark === 'in' ? startPosition : endPosition}
+              disabled={isProcessing}
+              onChange={(value) => {
+                setClipStatus(undefined);
+                (mark === 'in' ? setStartPosition : setEndPosition)(value);
+              }}
+            />
+          ))}
         </div>
 
         <p className="range-help">
-          Setting the end position pauses playback so you can confirm the cut.
+          Accepts 83, 1:23 or 0:01:23.5. Lossless clips start at the keyframe at or before In.
         </p>
 
         <div className="toggle-list" aria-label="Encoding options">
